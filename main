@@ -1,0 +1,145 @@
+import telebot
+import requests
+
+# токен чат-бота в телеграм
+TOKEN = 'your_token_here'
+bot = telebot.TeleBot(TOKEN)
+
+# токен API поисковой системы рецептов
+API_TOKEN = 'your_api_token_here'
+# базовый URL API
+API_URL_BASE = 'https://api.edamam.com'
+# endpoint для поиска рецептов
+API_RECIPES_ENDPOINT = '/search'
+API_ID = 'your_api_id_here'
+API_ID2 = 'your_api_id_here'
+
+# токен API базы данных продуктов Edamam
+FOOD_API_TOKEN = 'your_api_token_here'
+# endpoint для поиска продуктов в базе данных
+FOOD_API_SEARCH_ENDPOINT = '/api/food-database/v2/parser'
+
+# функция поиска продуктов по заданным параметрам
+def search_foods(query):
+    url = API_URL_BASE + FOOD_API_SEARCH_ENDPOINT
+    params = {
+        'app_id': API_ID2,
+        'app_key': FOOD_API_TOKEN,
+        'ingr': query
+    }
+    try:
+        response = requests.get(url, params=params)
+        response.raise_for_status()
+        data = response.json()
+        if 'hints' in data and data['hints']:
+            return data['hints'] # если есть хотя бы один продукт
+        else:
+            return [] # если список продуктов пустой
+    except requests.exceptions.RequestException:
+        return []
+
+# обработчик команды пользователя для поиска нужного продукта
+@bot.message_handler(commands=['food'])
+def handle_food_command(message):
+    # получение запроса на поиск продукта от пользователя
+    query = message.text.strip().lower().replace('/food', '')
+    if not query:
+        bot.send_message(chat_id=message.chat.id, text='Введите название продукта!')
+        return
+    # поиск продукта по заданным параметрам
+    foods = search_foods(query)
+    if foods:
+        # извлечение списка найденных продуктов из ответа API
+        food_list = [food['food']['label'] for food in foods]
+        # отправка пользователю списка найденных продуктов
+        bot.send_message(chat_id=message.chat.id, text='\n'.join(food_list))
+    else:
+        bot.send_message(chat_id=message.chat.id, text='Продукты не найдены!')
+
+# функция поиска рецептов по заданным параметрам
+def search_recipes(ingredients):
+    url = API_URL_BASE + API_RECIPES_ENDPOINT
+    params = {
+        'app_id': API_ID,
+        'app_key': API_TOKEN,
+        'q': ','.join(ingredients)
+    }
+    try:
+        response = requests.get(url, params=params)
+        response.raise_for_status()
+        data = response.json()
+        if 'hits' in data and data['hits']:
+            return data['hits'] # если есть хотя бы один рецепт
+        else:
+            return [] # если список рецептов пустой
+    except requests.exceptions.RequestException:
+        return []
+
+# функция фильтрации списка рецептов по наличию в них заданных ингредиентов
+def filter_recipes(recipes, available_ingredients):
+    filtered_recipes = [recipe for recipe in recipes if all(ingredient.strip().lower() in map(str.strip, available_ingredients) for ingredient in recipe['recipe']['ingredientLines'])]
+    return filtered_recipes
+
+# обработчик сообщений пользователя
+@bot.message_handler(content_types=['text'])
+def handle_message(message):
+    # получение списка ингредиентов из холодильника пользователя, представленных в виде строки, разделенной запятыми
+    ingredients = [i.strip().lower() for i in message.text.split(',') if i.strip()]
+    if not ingredients:
+        bot.send_message(chat_id=message.chat.id, text='Список ингредиентов пустой!')
+        return
+    # поиск рецептов по заданным ингредиентам
+    recipes = search_recipes(ingredients)
+    if recipes:
+        # фильтрация рецептов по наличию заданных ингредиентов
+        available_recipes = filter_recipes(recipes, ingredients)
+        if available_recipes:
+            # извлечение названий ингредиентов из найденных рецептов
+            available_ingredients = [ingredient['text'].strip().lower()
+                                     for recipe in available_recipes for ingredient in recipe['recipe']['ingredients']]
+            # отправка пользователю списка рецептов с найденными ингредиентами
+            recipe_list = [
+                f"{recipe['recipe']['label']} ({', '.join(ingredient['text'].strip().lower() for ingredient in recipe['recipe']['ingredients'])})"
+                for recipe in available_recipes]
+            bot.send_message(chat_id=message.chat.id, text='\n\n'.join(recipe_list))
+        else:
+            bot.send_message(chat_id=message.chat.id, text='Рецепты с заданными ингредиентами не найдены!')
+        else:
+        bot.send_message(chat_id=message.chat.id, text='Рецепты не найдены!')
+
+        # функция поиска продуктов по заданным параметрам
+        def search_foods(query):
+            url = API_URL_BASE + FOOD_API_SEARCH_ENDPOINT
+            params = {
+                'app_id': API_ID2,
+                'app_key': FOOD_API_TOKEN,
+                'ingr': query
+            }
+            try:
+                response = requests.get(url, params=params)
+                response.raise_for_status()
+                data = response.json()
+                if 'hints' in data and data['hints']:
+                    return data['hints']  # если есть хотя бы один продукт
+                else:
+                    return []  # если список продуктов пустой
+            except requests.exceptions.RequestException:
+                return []
+
+        # обработчик команды пользователя для поиска нужного продукта
+        @bot.message_handler(commands=['food'])
+        def handle_food_command(message):
+            # получение запроса на поиск продукта от пользователя
+            query = message.text.strip().lower().replace('/food', '')
+            if not query:
+                bot.send_message(chat_id=message.chat.id, text='Введите название продукта!')
+                return
+            # поиск продукта по заданным параметрам
+            foods = search_foods(query)
+            if foods:
+                # извлечение списка найденных продуктов из ответа API
+                food_list = [food['food']['label'] for food in foods]
+                # отправка пользователю списка найденных продуктов
+                bot.send_message(chat_id=message.chat.id, text='\n'.join(food_list))
+            else:
+                bot.send_message(chat_id=message.chat.id, text='Продукты не найдены!')
